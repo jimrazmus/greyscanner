@@ -1,0 +1,374 @@
+#!/usr/bin/perl
+
+# Copyright (c) 2006 Bob Beck <beck@openbsd.org>.  All rights reserved.
+# Copyright (c) 2009 Jim Razmus II <jim@openbsd.org>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+use strict;
+use Net::DNS;
+use Email::Valid;
+use POSIX qw(setsid);
+use Sys::Syslog qw(:DEFAULT setlogsock);
+
+use constant {
+    STATE     => 0,
+    IP        => 1,
+    HOST_NAME => 2,
+    MAIL_FROM => 3,
+    RCPT_TO   => 4,
+};
+
+my $SCAN_INTERVAL            = 600;
+my $DNS_SOCK_MAX             = 50;
+my $SUSPECT_TUPLES           = 5;
+my $MAX_DOMAINS              = 3;
+my $MAX_SENDERS_RATIO        = 0.75;
+my @BADRERCPT                = ();
+my @GOODRERCPT               = ();
+my $EXTERNAL_ADDRESS_CHECKER = q{};
+my $COMPREHENSIVE            = 0;
+
+eval `cat /etc/greyscanner.conf`;
+
+chdir '/' or die "can't chdir to /";
+open( STDIN,  '<',  '/dev/null' ) or die "can't open /dev/null";
+open( STDOUT, '>>', '/dev/null' ) or die "can't open /dev/null";
+open( STDERR, '>>', '/dev/null' ) or die "can't open /dev/null";
+defined( my $pid = fork ) or die "Can't fork: $!";
+exit if ($pid);
+setsid or die "can't setsid: $!";
+setlogsock('unix');
+openlog( 'greyscanner', 'pid', 'mail' ) || die "can't openlog";
+
+while (1) {
+    syslog( 'debug', 'Scan started' );
+    my $pid = fork();
+
+    if ( $pid == 0 ) {
+        &scan;
+        exit(0);
+    }
+    elsif ($pid) {
+        wait;
+    }
+    elsif ( not defined $pid ) {
+        syslog( 'err', 'Failed to fork' );
+    }
+
+    syslog( 'debug', 'Scan completed' );
+    sleep($SCAN_INTERVAL);
+}
+
+exit 0;
+
+sub is_rcpt_bad {
+    my $rcpt = shift;
+    my $re;
+
+    foreach $re (@GOODRERCPT) {
+        return (0) if ( $rcpt =~ /$re/i );
+    }
+
+    $COMPREHENSIVE && return (1);
+
+    foreach $re (@BADRERCPT) {
+        return (1) if ( $rcpt =~ /$re/i );
+    }
+
+    if ( -x $EXTERNAL_ADDRESS_CHECKER ) {
+        return (1)
+          if ( system( ( "$EXTERNAL_ADDRESS_CHECKER", "$rcpt" ) ) != 0 );
+    }
+
+    return (0);
+}
+
+sub scan {
+    setlogsock('unix');
+    openlog( 'greyscanner', 'pid', 'mail' ) || die "can't openlog";
+
+    my %WHITE;
+    my %GREY;
+    my %TRAPPED;
+    my %FROM;
+    my %RCPT;
+    my %SENDERS;
+    my @line;
+
+    open( SPAMDB, "/usr/sbin/spamdb|" ) || die "can't invoke spamdb!";
+    while (<SPAMDB>) {
+        chomp;
+        @line = split('\|');
+
+        if ( $line[STATE] eq 'WHITE' ) {
+
+            $WHITE{"$line[IP]"}++;
+
+        }
+        elsif ( $line[STATE] eq 'TRAPPED' ) {
+
+            $TRAPPED{"$line[IP]"}++;
+
+        }
+        elsif ( $line[STATE] eq 'GREY' ) {
+
+            $line[MAIL_FROM] =~ s/^<//;
+            $line[MAIL_FROM] =~ s/>$//;
+            $line[RCPT_TO]   =~ s/^<//;
+            $line[RCPT_TO]   =~ s/>$//;
+
+            if ( $GREY{"$line[IP]"} ) {
+                $FROM{"$line[IP]"} .= "\t$line[MAIL_FROM]";
+                $RCPT{"$line[IP]"} .= "\t$line[RCPT_TO]";
+            }
+            else {
+                $GREY{"$line[IP]"}++;
+                $FROM{"$line[IP]"} = "$line[MAIL_FROM]";
+                $RCPT{"$line[IP]"} = "$line[RCPT_TO]";
+            }
+
+        }
+
+    }
+    close(SPAMDB);
+
+    my $wi = keys %WHITE;
+    my $tr = keys %TRAPPED;
+    my $gr = keys %GREY;
+    syslog( 'debug',
+        "scanned $wi whitelisted, $tr trapped, $gr unique greys\n" );
+
+    my ( $grey, $r, $s );
+    foreach $grey ( keys %GREY ) {
+
+        ### Ignore if it's already done
+        next if ( $TRAPPED{$grey} || $WHITE{$grey} );
+
+        ### Check the recipients.
+        my @rcpts = split( "\t", $RCPT{$grey} );
+        foreach $r (@rcpts) {
+            if ( &is_rcpt_bad($r) ) {
+                &trap( $grey, "$grey mailed to trap address $r" );
+                $TRAPPED{$grey}++;
+                last;
+            }
+        }
+        next if $TRAPPED{$grey};
+
+        ### Check the senders.
+        my @senders = split( "\t", $FROM{$grey} );
+        foreach $s (@senders) {
+            unless (
+                Email::Valid->address(
+                    -address     => "$s",
+                    -fudge       => 1,
+                    -local_rules => 1
+                )
+              )
+            {
+                &trap( $grey,
+                    "$grey mailed from bad address $s ($Email::Valid::Details)"
+                );
+                $TRAPPED{$grey}++;
+                last;
+            }
+        }
+        next if $TRAPPED{$grey};
+
+        ### Check if host has queued up more than our suspect threshold
+        my $count = @senders;
+
+        if ( $count > $SUSPECT_TUPLES ) {
+            my %R = ();
+            my %S = ();
+            my %D = ();
+
+            # count the unique senders, recipients, and domains.
+            foreach $r (@rcpts) {
+                $R{"$r"}++;
+            }
+            foreach $s (@senders) {
+                $S{"$s"}++;
+                $s =~ s/[^\@]+\@//;
+                $D{"$s"}++;
+            }
+
+            my $rcount = keys %R;
+            my $scount = keys %S;
+            my $dcount = keys %D;
+
+            if ( $dcount > $MAX_DOMAINS ) {
+                &trap( $grey,
+                    "$grey sending from $dcount domains (> $MAX_DOMAINS)" );
+                $TRAPPED{$grey}++;
+            }
+            elsif ( $scount / $count > $MAX_SENDERS_RATIO ) {
+                &trap( $grey,
+                    "$grey ratio is $scount/$count (> $MAX_SENDERS_RATIO)" );
+                $TRAPPED{$grey}++;
+            }
+
+        }
+        next if $TRAPPED{$grey};
+
+        next if ( !$DNS_SOCK_MAX );    # skip rest if not using DNS checks;
+
+        # finally, we will check for an MX or A record of the source address.
+        # first we build a hash of all the senders, keyed by host part
+        # of the address, so we only look each host part up once, no matter
+        # how many hosts are sending mail with it as the sender.
+
+        my %done = ();
+        foreach $s (@senders) {
+
+            # extract the host part.
+            my $h = ( $s =~ /^.*@(.*)$/ ? $1 : $s );
+            $h =~ s/\s_+//g;
+
+            if ( !$done{"$h"} ) {
+                if ( $SENDERS{$h} ) {
+                    $SENDERS{$h} .= "\t $grey";
+                }
+                else {
+                    $SENDERS{$h} = "$grey";
+                }
+            }
+            $done{$h}++;
+        }
+
+    }
+
+    if ( !$DNS_SOCK_MAX ) {
+        exit(0);
+    }
+
+    # DNS sucks moose rocks. So we have to do a bazillion queries in
+    # parallel to get any kind of speed. Sigh... Whip through the list of
+    # addresses being sent, and validate them by checking for an A or
+    # MX record. We don't use Email::Validate because it can't do background
+    # queries. instead we use Net::DNS directly and call select..
+
+    my $timeout = 5;
+    my $sel     = IO::Select->new;
+    my $res     = Net::DNS::Resolver->new;
+    my @domains = ( keys %SENDERS );
+
+    while ( scalar @domains > 0 ) {
+        my @active = $sel->handles;
+        while ( $#active < $DNS_SOCK_MAX - 1 ) {
+
+            # queue up a query for this domain.
+            my $d = pop(@domains);
+            $sel->add( $res->bgsend( $d, "A" ) );
+            $sel->add( $res->bgsend( $d, "MX" ) );
+            @active = $sel->handles;
+        }
+        my @ready = $sel->can_read($timeout);
+        if (@ready) {
+            foreach my $sock (@ready) {
+                my $packet = $res->bgread($sock);
+                if ( $packet->header->ancount ) {
+                    my @q = $packet->question;
+                    if ( $q[0]->qtype eq "A" || $q[0]->qtype eq "MX" ) {
+                        my $d = $q[0]->qname;
+                        delete $SENDERS{$d};
+                    }
+                }
+
+                # Check for the other sockets.
+                $sel->remove($sock);
+                $sock = undef;
+            }
+        }
+        else {
+
+            # nothing for now.
+        }
+    }
+    @domains = undef;
+
+    my $timedout = 0;
+    my @ready;
+    while ($timedout < 4
+        && $sel->handles
+        && ( @ready = $sel->can_read($timeout) ) )
+    {
+        if (@ready) {
+            foreach my $sock (@ready) {
+                my $packet = $res->bgread($sock);
+                if ( $packet->header->ancount ) {
+                    my @q = $packet->question;
+                    if ( $q[0]->qtype eq "A" || $q[0]->qtype eq "MX" ) {
+                        my $d = $q[0]->qname;
+                        delete $SENDERS{$d};
+                    }
+                }
+
+                # Check for the other sockets.
+                $sel->remove($sock);
+                $sock = undef;
+            }
+        }
+        else {
+            $timedout++;
+        }
+    }
+
+    # now whatever is left in %SENDERS is evil - we removed everything
+    # we could find a mailer for. We go through the evil addresses
+    # and trap anyone sending from one...
+    my ( $dead, $evil );
+    foreach $evil ( keys %SENDERS ) {
+        my @deaders = split( "\t", $SENDERS{$evil} );
+        foreach $dead (@deaders) {
+            &trap( $dead, "Mailed from sender $evil with no MX or A" );
+        }
+        @deaders = undef;
+    }
+}
+
+sub trap {
+    my $ip     = shift;
+    my $reason = shift;
+    system "/usr/sbin/spamdb -t -a $ip\n";
+    syslog( 'info', "Trapped $ip: $reason" );
+}
+
+__END__
+
+=head1 NAME
+
+greyscanner - Grey trapping daemon for OpenBSD spamd
+
+=head1 SYNOPSIS
+
+B<greyscanner>
+
+=head1 DESCRIPTION
+
+greyscanner compliments OpenBSD spamd(8) greylisting by applying
+additional heuristics to greylisted hosts.  Additional heuristics
+include: confirm senders email address is valid, confirm existence of
+the senders MX or A record in DNS, confirm recipient address(es) is
+valid, and more.  Offending hosts are flagged as 'trapped' in the spamd
+database.
+
+=head1 FILES
+
+F</etc/greyscanner.conf> optional config file
+
+=head1 HISTORY
+
+Bob Beck created greyscanner in 2006.  Jim Razmus II revised the
+program, added documentation, and packaged it for OpenBSD in 2009.
