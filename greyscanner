@@ -34,8 +34,8 @@ my $DNS_SOCK_MAX             = 50;
 my $SUSPECT_TUPLES           = 5;
 my $MAX_DOMAINS              = 3;
 my $MAX_SENDERS_RATIO        = 0.75;
-my @BADRERCPT                = ();
-my @GOODRERCPT               = ();
+my @BAD                      = ();
+my @GOOD                     = ();
 my $EXTERNAL_ADDRESS_CHECKER = q{};
 my $COMPREHENSIVE            = 0;
 
@@ -75,13 +75,13 @@ exit 0;
 sub is_rcpt_bad {
     my $rcpt = shift;
 
-    foreach (@GOODRERCPT) {
+    foreach (@GOOD) {
         return (0) if ( $rcpt =~ $_ );
     }
 
     $COMPREHENSIVE && return (1);
 
-    foreach (@BADRERCPT) {
+    foreach (@BAD) {
         return (1) if ( $rcpt =~ $_ );
     }
 
@@ -366,6 +366,10 @@ database.
 =head1 FILES
 
 F</etc/greyscanner.conf> optional config file
+
+=head1 SEE ALSO
+
+spamd(8), spamdb(8)
 
 =head1 HISTORY
 
