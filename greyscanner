@@ -269,6 +269,7 @@ sub scan {
 
             # queue up a query for this domain.
             my $d = pop(@domains);
+            last if (!defined($d));
             $sel->add( $res->bgsend( $d, "A" ) );
             $sel->add( $res->bgsend( $d, "MX" ) );
             @active = $sel->handles;
