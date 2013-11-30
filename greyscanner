@@ -107,7 +107,7 @@ sub scan {
     open my $spamdb, q{-|}, '/usr/sbin/spamdb' || die q{can't invoke spamdb!};
     while (<$spamdb>) {
         chomp;
-        @line = split '\|';
+        @line = split m/[|]/s;
 
         if ( $line[STATE] eq 'WHITE' ) {
 
@@ -153,7 +153,7 @@ sub scan {
         next if ( $TRAPPED{$grey} || $WHITE{$grey} );
 
         ### Check the recipients.
-        my @rcpts = split "\t", $RCPT{$grey};
+        my @rcpts = split m/\t/s, $RCPT{$grey};
         foreach my $r (@rcpts) {
             if ( &is_rcpt_bad($r) ) {
                 &trap( $grey, "$grey mailed to trap address $r" );
@@ -164,7 +164,7 @@ sub scan {
         next if $TRAPPED{$grey};
 
         ### Check the senders.
-        my @senders = split "\t", $FROM{$grey};
+        my @senders = split m/\t/s, $FROM{$grey};
         foreach my $s (@senders) {
             unless (
                 Email::Valid->address(
@@ -323,7 +323,7 @@ sub scan {
     # we could find a mailer for. We go through the evil addresses
     # and trap anyone sending from one...
     foreach my $evil ( keys %SENDERS ) {
-        my @deaders = split "\t", $SENDERS{$evil};
+        my @deaders = split m/\t/s, $SENDERS{$evil};
         foreach my $dead (@deaders) {
             &trap( $dead, "Mailed from sender $evil with no MX or A" );
         }
