@@ -291,10 +291,6 @@ sub scan {
                 $sock = undef;
             }
         }
-        else {
-
-            # nothing for now.
-        }
     }
     @domains = undef;
 
