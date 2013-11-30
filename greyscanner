@@ -41,15 +41,15 @@ my $COMPREHENSIVE            = 0;
 
 eval `cat /etc/greyscanner.conf`;
 
-chdir '/' or die "can't chdir to /";
-open STDIN,  '<',  '/dev/null' or die "can't open /dev/null";
-open STDOUT, '>>', '/dev/null' or die "can't open /dev/null";
-open STDERR, '>>', '/dev/null' or die "can't open /dev/null";
+chdir '/' or die q{can't chdir to /};
+open STDIN,  '<',  '/dev/null' or die q{can't open /dev/null};
+open STDOUT, '>>', '/dev/null' or die q{can't open /dev/null};
+open STDERR, '>>', '/dev/null' or die q{can't open /dev/null};
 defined( my $pid = fork ) or die "Can't fork: $!";
 exit if ($pid);
 setsid or die "can't setsid: $!";
 setlogsock('unix');
-openlog( 'greyscanner', 'pid', 'mail' ) || die "can't openlog";
+openlog( 'greyscanner', 'pid', 'mail' ) || die q{can't openlog};
 
 while (1) {
     syslog( 'debug', 'Scan started' );
@@ -95,7 +95,7 @@ sub is_rcpt_bad {
 
 sub scan {
     setlogsock('unix');
-    openlog( 'greyscanner', 'pid', 'mail' ) || die "can't openlog";
+    openlog( 'greyscanner', 'pid', 'mail' ) || die q{can't openlog};
 
     my %WHITE;
     my %GREY;
@@ -105,7 +105,7 @@ sub scan {
     my %SENDERS;
     my @line;
 
-    open( SPAMDB, "/usr/sbin/spamdb|" ) || die "can't invoke spamdb!";
+    open( SPAMDB, "/usr/sbin/spamdb|" ) || die q{can't invoke spamdb!};
     while (<SPAMDB>) {
         chomp;
         @line = split '\|';
@@ -270,8 +270,8 @@ sub scan {
             # queue up a query for this domain.
             my $d = pop @domains;
             last unless defined $d;
-            $sel->add( $res->bgsend( $d, "A" ) );
-            $sel->add( $res->bgsend( $d, "MX" ) );
+            $sel->add( $res->bgsend( $d, 'A' ) );
+            $sel->add( $res->bgsend( $d, 'MX' ) );
             @active = $sel->handles;
         }
         my @ready = $sel->can_read($timeout);
@@ -280,7 +280,7 @@ sub scan {
                 my $packet = $res->bgread($sock);
                 if ( $packet->header->ancount ) {
                     my @q = $packet->question;
-                    if ( $q[0]->qtype eq "A" || $q[0]->qtype eq "MX" ) {
+                    if ( $q[0]->qtype eq 'A' || $q[0]->qtype eq 'MX' ) {
                         my $d = $q[0]->qname;
                         delete $SENDERS{$d};
                     }
@@ -305,7 +305,7 @@ sub scan {
                 my $packet = $res->bgread($sock);
                 if ( $packet->header->ancount ) {
                     my @q = $packet->question;
-                    if ( $q[0]->qtype eq "A" || $q[0]->qtype eq "MX" ) {
+                    if ( $q[0]->qtype eq 'A' || $q[0]->qtype eq 'MX' ) {
                         my $d = $q[0]->qname;
                         delete $SENDERS{$d};
                     }
