@@ -42,9 +42,9 @@ my $COMPREHENSIVE            = 0;
 eval `cat /etc/greyscanner.conf`;
 
 chdir '/' or die "can't chdir to /";
-open( STDIN,  '<',  '/dev/null' ) or die "can't open /dev/null";
-open( STDOUT, '>>', '/dev/null' ) or die "can't open /dev/null";
-open( STDERR, '>>', '/dev/null' ) or die "can't open /dev/null";
+open STDIN,  '<',  '/dev/null' or die "can't open /dev/null";
+open STDOUT, '>>', '/dev/null' or die "can't open /dev/null";
+open STDERR, '>>', '/dev/null' or die "can't open /dev/null";
 defined( my $pid = fork ) or die "Can't fork: $!";
 exit if ($pid);
 setsid or die "can't setsid: $!";
@@ -53,11 +53,11 @@ openlog( 'greyscanner', 'pid', 'mail' ) || die "can't openlog";
 
 while (1) {
     syslog( 'debug', 'Scan started' );
-    my $pid = fork();
+    my $pid = fork;
 
     if ( $pid == 0 ) {
         &scan;
-        exit(0);
+        exit 0;
     }
     elsif ($pid) {
         wait;
@@ -67,7 +67,7 @@ while (1) {
     }
 
     syslog( 'debug', 'Scan completed' );
-    sleep($SCAN_INTERVAL);
+    sleep $SCAN_INTERVAL;
 }
 
 exit 0;
@@ -108,7 +108,7 @@ sub scan {
     open( SPAMDB, "/usr/sbin/spamdb|" ) || die "can't invoke spamdb!";
     while (<SPAMDB>) {
         chomp;
-        @line = split('\|');
+        @line = split '\|';
 
         if ( $line[STATE] eq 'WHITE' ) {
 
@@ -140,7 +140,7 @@ sub scan {
         }
 
     }
-    close(SPAMDB);
+    close SPAMDB;
 
     my $wi = keys %WHITE;
     my $tr = keys %TRAPPED;
@@ -155,7 +155,7 @@ sub scan {
         next if ( $TRAPPED{$grey} || $WHITE{$grey} );
 
         ### Check the recipients.
-        my @rcpts = split( "\t", $RCPT{$grey} );
+        my @rcpts = split "\t", $RCPT{$grey};
         foreach $r (@rcpts) {
             if ( &is_rcpt_bad($r) ) {
                 &trap( $grey, "$grey mailed to trap address $r" );
@@ -166,7 +166,7 @@ sub scan {
         next if $TRAPPED{$grey};
 
         ### Check the senders.
-        my @senders = split( "\t", $FROM{$grey} );
+        my @senders = split "\t", $FROM{$grey};
         foreach $s (@senders) {
             unless (
                 Email::Valid->address(
@@ -249,7 +249,7 @@ sub scan {
     }
 
     if ( !$DNS_SOCK_MAX ) {
-        exit(0);
+        exit 0;
     }
 
     # DNS sucks moose rocks. So we have to do a bazillion queries in
@@ -268,7 +268,7 @@ sub scan {
         while ( $#active < $DNS_SOCK_MAX - 1 ) {
 
             # queue up a query for this domain.
-            my $d = pop(@domains);
+            my $d = pop @domains;
             last if (!defined($d));
             $sel->add( $res->bgsend( $d, "A" ) );
             $sel->add( $res->bgsend( $d, "MX" ) );
@@ -326,7 +326,7 @@ sub scan {
     # and trap anyone sending from one...
     my ( $dead, $evil );
     foreach $evil ( keys %SENDERS ) {
-        my @deaders = split( "\t", $SENDERS{$evil} );
+        my @deaders = split "\t", $SENDERS{$evil};
         foreach $dead (@deaders) {
             &trap( $dead, "Mailed from sender $evil with no MX or A" );
         }
