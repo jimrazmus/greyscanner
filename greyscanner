@@ -104,8 +104,8 @@ sub scan {
     my %SENDERS;
     my @line;
 
-    open( SPAMDB, "/usr/sbin/spamdb|" ) || die q{can't invoke spamdb!};
-    while (<SPAMDB>) {
+    open my $spamdb, q{-|}, '/usr/sbin/spamdb' || die q{can't invoke spamdb!};
+    while (<$spamdb>) {
         chomp;
         @line = split '\|';
 
@@ -139,7 +139,7 @@ sub scan {
         }
 
     }
-    close SPAMDB;
+    close $spamdb;
 
     my $wi = keys %WHITE;
     my $tr = keys %TRAPPED;
