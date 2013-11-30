@@ -57,7 +57,6 @@ while (1) {
 
     if ( $pid == 0 ) {
         &scan;
-        exit 0;
     }
     elsif ($pid) {
         wait;
@@ -330,6 +329,8 @@ sub scan {
         }
         @deaders = undef;
     }
+
+    exit 0;
 }
 
 sub trap {
