@@ -148,15 +148,14 @@ sub scan {
     syslog( 'debug',
         "scanned $wi whitelisted, $tr trapped, $gr unique greys\n" );
 
-    my ( $grey, $r, $s );
-    foreach $grey ( keys %GREY ) {
+    foreach my $grey ( keys %GREY ) {
 
         ### Ignore if it's already done
         next if ( $TRAPPED{$grey} || $WHITE{$grey} );
 
         ### Check the recipients.
         my @rcpts = split "\t", $RCPT{$grey};
-        foreach $r (@rcpts) {
+        foreach my $r (@rcpts) {
             if ( &is_rcpt_bad($r) ) {
                 &trap( $grey, "$grey mailed to trap address $r" );
                 $TRAPPED{$grey}++;
@@ -167,7 +166,7 @@ sub scan {
 
         ### Check the senders.
         my @senders = split "\t", $FROM{$grey};
-        foreach $s (@senders) {
+        foreach my $s (@senders) {
             unless (
                 Email::Valid->address(
                     -address     => "$s",
@@ -194,10 +193,10 @@ sub scan {
             my %D = ();
 
             # count the unique senders, recipients, and domains.
-            foreach $r (@rcpts) {
+            foreach my $r (@rcpts) {
                 $R{"$r"}++;
             }
-            foreach $s (@senders) {
+            foreach my $s (@senders) {
                 $S{"$s"}++;
                 $s =~ s/[^\@]+\@//;
                 $D{"$s"}++;
@@ -229,7 +228,7 @@ sub scan {
         # how many hosts are sending mail with it as the sender.
 
         my %done = ();
-        foreach $s (@senders) {
+        foreach my $s (@senders) {
 
             # extract the host part.
             my $h = ( $s =~ /^.*@(.*)$/ ? $1 : $s );
@@ -324,10 +323,9 @@ sub scan {
     # now whatever is left in %SENDERS is evil - we removed everything
     # we could find a mailer for. We go through the evil addresses
     # and trap anyone sending from one...
-    my ( $dead, $evil );
-    foreach $evil ( keys %SENDERS ) {
+    foreach my $evil ( keys %SENDERS ) {
         my @deaders = split "\t", $SENDERS{$evil};
-        foreach $dead (@deaders) {
+        foreach my $dead (@deaders) {
             &trap( $dead, "Mailed from sender $evil with no MX or A" );
         }
         @deaders = undef;
