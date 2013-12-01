@@ -68,7 +68,7 @@ while (1) {
         syslog( 'err', 'Failed to fork' );
     }
 
-    ### Scan completed
+    ### Scan completed: "Sleeping for $SCAN_INTERVAL secs."
     sleep $SCAN_INTERVAL;
 }
 
