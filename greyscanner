@@ -41,18 +41,21 @@ my $COMPREHENSIVE            = 0;
 
 eval `cat /etc/greyscanner.conf`;
 
-chdir '/' or die q{can't chdir to /};
-open STDIN,  '<',  '/dev/null' or die q{can't open /dev/null};
-open STDOUT, '>>', '/dev/null' or die q{can't open /dev/null};
-open STDERR, '>>', '/dev/null' or die q{can't open /dev/null};
-defined( my $pid = fork ) or die "Can't fork: $!";
-exit if ($pid);
-setsid or die "can't setsid: $!";
+if ( !$ENV{DEBUG} ) {
+    chdir '/' or die q{can't chdir to /};
+    open STDIN,  '<',  '/dev/null' or die q{can't open /dev/null};
+    open STDOUT, '>>', '/dev/null' or die q{can't open /dev/null};
+    open STDERR, '>>', '/dev/null' or die q{can't open /dev/null};
+    defined( my $pid = fork ) or die "Can't fork: $!";
+    exit if ($pid);
+    setsid or die "can't setsid: $!";
+}
+
 setlogsock('unix');
 openlog( 'greyscanner', 'pid', 'mail' ) || die q{can't openlog};
 
 while (1) {
-    syslog( 'debug', 'Scan started' );
+    ### Beginning a Scan
     my $pid = fork;
 
     if ( $pid == 0 ) {
@@ -65,7 +68,7 @@ while (1) {
         syslog( 'err', 'Failed to fork' );
     }
 
-    syslog( 'debug', 'Scan completed' );
+    ### Scan completed
     sleep $SCAN_INTERVAL;
 }
 
@@ -73,6 +76,7 @@ exit 0;
 
 sub is_rcpt_bad {
     my $rcpt = shift;
+    ### is_rcpt_bad: $rcpt
 
     foreach (@GOOD) {
         return (0) if ( $rcpt =~ $_ );
@@ -144,10 +148,12 @@ sub scan {
     my $wi = keys %WHITE;
     my $tr = keys %TRAPPED;
     my $gr = keys %GREY;
-    syslog( 'debug',
-        "scanned $wi whitelisted, $tr trapped, $gr unique greys\n" );
+
+    ### Loaded: "$wi whitelisted, $tr trapped, $gr unique greys"
 
     foreach my $grey ( keys %GREY ) {
+
+        ### Analyzing Grey IP: $grey
 
         ### Ignore if it's already done
         next if ( $TRAPPED{$grey} || $WHITE{$grey} );
@@ -165,7 +171,8 @@ sub scan {
 
         ### Check the senders.
         my @senders = split m/\t/s, $FROM{$grey};
-        foreach my $s (@senders) {
+	foreach my $s (@senders) {
+            ### Sender: $s
             unless (
                 Email::Valid->address(
                     -address     => "$s",
@@ -338,6 +345,7 @@ sub trap {
     my $reason = shift;
     system "/usr/sbin/spamdb -t -a $ip\n";
     syslog( 'info', "Trapped $ip: $reason" );
+    ### trapped: "$ip for $reason"
 }
 
 __END__
