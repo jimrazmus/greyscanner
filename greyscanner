@@ -171,6 +171,12 @@ sub scan {
 
         ### Check the senders.
         my @senders = split m/\t/s, $FROM{$grey};
+        if ( !@senders ) {
+                &trap( $grey, 'mailed with no sender' );
+                $TRAPPED{$grey}++;
+        }
+        next if $TRAPPED{$grey};
+
 	foreach my $s (@senders) {
             ### Sender: $s
             unless (
