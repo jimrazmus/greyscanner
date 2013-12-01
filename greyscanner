@@ -74,26 +74,108 @@ while (1) {
 
 exit 0;
 
-sub is_rcpt_bad {
-    my $rcpt = shift;
-    ### is_rcpt_bad: $rcpt
+# Check all recipients that we host against the good and bad lists. If any of
+# them fail the check, the sending host is trapped.  So one bad apple taints
+# the entire batch.
+sub check_recipients {
+    my ($recipients) = @_;
+    my $result = 1;
 
-    foreach (@GOOD) {
-        return (0) if ( $rcpt =~ $_ );
+    # XXX: filter for domains we host so we only process "our" email addresses
+    my @q = split m/\t/s, $recipients;
+    if ( !@q ) {
+        $result = 1;
     }
-
-    $COMPREHENSIVE && return (1);
-
-    foreach (@BAD) {
-        return (1) if ( $rcpt =~ $_ );
+    else {
+        foreach my $r (@q) {
+            ### Recipient: $r
+            foreach (@GOOD) {
+                if ( $r =~ $_ ) {
+		    $result = 0;
+		    last;
+		}
+            }
+            last if $result == 0;
+            $COMPREHENSIVE && ( $result = 1 ) && last;
+            foreach (@BAD) {
+                if ( $r =~ $_ ) {
+		    $result = 1;
+		    last;
+		}
+            }
+            if ( -x $EXTERNAL_ADDRESS_CHECKER ) {
+                if ( system( ( "$EXTERNAL_ADDRESS_CHECKER", "$r" ) ) != 0 ) {
+                    $result = 1;
+		    last;
+		}
+            }
+        }
     }
+    return $result;
+}
 
-    if ( -x $EXTERNAL_ADDRESS_CHECKER ) {
-        return (1)
-          if ( system( ( "$EXTERNAL_ADDRESS_CHECKER", "$rcpt" ) ) != 0 );
+# Check all senders that we've seen from the grey host.
+sub check_senders {
+    my ($senders) = @_;
+    my $result = 0;
+    my @q = split m/\t/s, $senders;
+    if ( !@q ) {
+        $result = 'mailed with no sender';
     }
+    else {
+        foreach my $s (@q) {
+            ### Sender: $s
+            unless (
+                Email::Valid->address(
+                    -address     => "$s",
+                    -fudge       => 1,
+                    -local_rules => 1
+                )
+              )
+            {
+                $result = "$s ($Email::Valid::Details)";
+                last;
+            }
+        }
+    }
+    return $result;
+}
 
-    return (0);
+sub check_thresholds {
+    my ( $senders, $recipients ) = @_;
+    my $result = 0;
+    my @qr     = split m/\t/s, $recipients;
+    my @qs     = split m/\t/s, $senders;
+    my $count  = @qs;
+
+    if ( $count > $SUSPECT_TUPLES ) {
+        my %R = ();
+        my %S = ();
+        my %D = ();
+
+        # count the unique senders, recipients, and domains.
+        foreach my $r (@qr) {
+            $R{"$r"}++;
+        }
+        foreach my $s (@qs) {
+            $S{"$s"}++;
+            $s =~ s/[^\@]+\@//;
+            $D{"$s"}++;
+        }
+
+        my $rcount = keys %R;
+        my $scount = keys %S;
+        my $dcount = keys %D;
+
+        if ( $dcount > $MAX_DOMAINS ) {
+            $result = "sending from $dcount domains (> $MAX_DOMAINS)";
+        }
+        elsif ( $scount / $count > $MAX_SENDERS_RATIO ) {
+            $result = "ratio is $scount/$count (> $MAX_SENDERS_RATIO)";
+        }
+
+    }
+    return $result;
 }
 
 sub scan {
@@ -159,76 +241,23 @@ sub scan {
         next if ( $TRAPPED{$grey} || $WHITE{$grey} );
 
         ### Check the recipients.
-        my @rcpts = split m/\t/s, $RCPT{$grey};
-        foreach my $r (@rcpts) {
-            if ( &is_rcpt_bad($r) ) {
-                &trap( $grey, "$grey mailed to trap address $r" );
-                $TRAPPED{$grey}++;
-                last;
-            }
+        if ( &check_recipients( $RCPT{$grey} ) ) {
+            &trap( $grey, "$grey failed recipient check" );
+            $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
 
         ### Check the senders.
-        my @senders = split m/\t/s, $FROM{$grey};
-        if ( !@senders ) {
-                &trap( $grey, 'mailed with no sender' );
-                $TRAPPED{$grey}++;
-        }
-        next if $TRAPPED{$grey};
-
-	foreach my $s (@senders) {
-            ### Sender: $s
-            unless (
-                Email::Valid->address(
-                    -address     => "$s",
-                    -fudge       => 1,
-                    -local_rules => 1
-                )
-              )
-            {
-                &trap( $grey,
-                    "$grey mailed from bad address $s ($Email::Valid::Details)"
-                );
-                $TRAPPED{$grey}++;
-                last;
-            }
+        if ( my $msg = &check_senders( $FROM{$grey} ) ) {
+            &trap( $grey, "$grey failed sender check: $msg" );
+            $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
 
         ### Check if host has queued up more than our suspect threshold
-        my $count = @senders;
-
-        if ( $count > $SUSPECT_TUPLES ) {
-            my %R = ();
-            my %S = ();
-            my %D = ();
-
-            # count the unique senders, recipients, and domains.
-            foreach my $r (@rcpts) {
-                $R{"$r"}++;
-            }
-            foreach my $s (@senders) {
-                $S{"$s"}++;
-                $s =~ s/[^\@]+\@//;
-                $D{"$s"}++;
-            }
-
-            my $rcount = keys %R;
-            my $scount = keys %S;
-            my $dcount = keys %D;
-
-            if ( $dcount > $MAX_DOMAINS ) {
-                &trap( $grey,
-                    "$grey sending from $dcount domains (> $MAX_DOMAINS)" );
-                $TRAPPED{$grey}++;
-            }
-            elsif ( $scount / $count > $MAX_SENDERS_RATIO ) {
-                &trap( $grey,
-                    "$grey ratio is $scount/$count (> $MAX_SENDERS_RATIO)" );
-                $TRAPPED{$grey}++;
-            }
-
+        if ( my $msg = &check_thresholds( $RCPT{$grey}, $FROM{$grey} ) ) {
+            &trap( $grey, "$grey failed threshold check: $msg" );
+            $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
 
@@ -240,6 +269,7 @@ sub scan {
         # how many hosts are sending mail with it as the sender.
 
         my %done = ();
+        my @senders = split m/\t/s, $FROM{$grey};
         foreach my $s (@senders) {
 
             # extract the host part.
