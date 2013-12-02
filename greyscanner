@@ -74,9 +74,6 @@ while (1) {
 
 exit 0;
 
-# Check all recipients that we host against the good and bad lists. If any of
-# them fail the check, the sending host is trapped.  So one bad apple taints
-# the entire batch.
 sub check_recipients {
     my ($recipients) = @_;
     my $result = 1;
@@ -115,7 +112,6 @@ sub check_recipients {
     return $result;
 }
 
-# Check all senders that we've seen from the grey host.
 sub check_senders {
     my ($senders) = @_;
     my $result = 0;
