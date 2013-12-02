@@ -95,7 +95,7 @@ sub check_recipients {
 		    last;
 		}
             }
-            last if $result == 0;
+            next if $result == 0;
             $COMPREHENSIVE && ( $result = 1 ) && last;
             foreach (@BAD) {
                 if ( $r =~ $_ ) {
@@ -103,6 +103,7 @@ sub check_recipients {
 		    last;
 		}
             }
+            last if $result == 1;
             if ( -x $EXTERNAL_ADDRESS_CHECKER ) {
                 if ( system( ( "$EXTERNAL_ADDRESS_CHECKER", "$r" ) ) != 0 ) {
                     $result = 1;
