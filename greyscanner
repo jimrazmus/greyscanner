@@ -39,7 +39,7 @@ my @GOOD                     = ();
 my $EXTERNAL_ADDRESS_CHECKER = q{};
 my $COMPREHENSIVE            = 0;
 
-eval `cat /etc/greyscanner.conf`;
+eval `cat /etc/mail/greyscanner.conf`;
 
 if ( !$ENV{DEBUG} ) {
     chdir '/' or die q{can't chdir to /};
@@ -406,7 +406,7 @@ database.
 
 =head1 FILES
 
-F</etc/greyscanner.conf> optional config file
+F</etc/mail/greyscanner.conf> optional config file
 
 =head1 SEE ALSO
 
