@@ -16,6 +16,8 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 use strict;
+use warnings;
+use IO::Handle;
 use Net::DNS;
 use Email::Valid;
 use POSIX qw(setsid);
@@ -58,10 +60,19 @@ while (1) {
     ### Beginning a Scan
     my $pid = fork;
 
+    pipe( READER, WRITER );
+    WRITER->autoflush(1);
+
     if ( $pid == 0 ) {
-        &scan;
+        close READER;
+        &child;
+        close WRITER;
+        exit;
     }
     elsif ($pid) {
+        close WRITER;
+        &parent;
+        close READER;
         wait;
     }
     elsif ( not defined $pid ) {
@@ -175,9 +186,11 @@ sub check_thresholds {
     return $result;
 }
 
-sub scan {
+sub child {
     setlogsock('unix');
     openlog( 'greyscanner', 'pid', 'mail' ) || die q{can't openlog};
+
+    #XXX - drop privs and become _greyscanner
 
     my %WHITE;
     my %GREY;
@@ -239,21 +252,21 @@ sub scan {
 
         ### Check the recipients.
         if ( &check_recipients( $RCPT{$grey} ) ) {
-            &trap( $grey, "$grey failed recipient check" );
+            print WRITER qq{$grey\t$grey failed recipient check};
             $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
 
         ### Check the senders.
         if ( my $msg = &check_senders( $FROM{$grey} ) ) {
-            &trap( $grey, "$grey failed sender check: $msg" );
+            print WRITER qq{$grey\t$grey failed sender check};
             $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
 
         ### Check if host has queued up more than our suspect threshold
         if ( my $msg = &check_thresholds( $RCPT{$grey}, $FROM{$grey} ) ) {
-            &trap( $grey, "$grey failed threshold check: $msg" );
+            print WRITER qq{$grey\t$grey failed threshold check: $msg};
             $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
@@ -287,7 +300,7 @@ sub scan {
     }
 
     if ( !$DNS_SOCK_MAX ) {
-        exit 0;
+        return;
     }
 
     # DNS sucks moose rocks. So we have to do a bazillion queries in
@@ -365,20 +378,31 @@ sub scan {
     foreach my $evil ( keys %SENDERS ) {
         my @deaders = split m/\t/s, $SENDERS{$evil};
         foreach my $dead (@deaders) {
-            &trap( $dead, "Mailed from sender $evil with no MX or A" );
+            print WRITER qq{$dead\tMailed from sender $evil with no MX or A};
         }
         @deaders = undef;
     }
 
-    exit 0;
+    return;
 }
 
-sub trap {
-    my $ip     = shift;
-    my $reason = shift;
-    system "/usr/sbin/spamdb -t -a $ip\n";
-    syslog( 'info', "Trapped $ip: $reason" );
-    ### trapped: "$ip for $reason"
+sub parent {
+    my $line;
+    my $ip_regex = '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)';
+    while ( $line = <READER> ) {
+        chomp $line;
+        if ( $line =~ m/^($ip_regex)\t(.*)$/s ) {
+            my $ip     = $1;
+            my $reason = $2;
+            system "/usr/sbin/spamdb -t -a $ip\n";
+            syslog( 'info', "Trapped $ip: $reason" );
+            ### trapped: "$ip for $reason"
+        }
+        else {
+            syslog( 'info', "Malformed line: $line" );
+            ### malformed line: $line
+        }
+    }
 }
 
 __END__
