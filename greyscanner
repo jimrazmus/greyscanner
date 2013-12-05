@@ -255,21 +255,21 @@ sub child {
 
         ### Check the recipients.
         if ( &check_recipients( $RCPT{$grey} ) ) {
-            print WRITER qq{$grey\t$grey failed recipient check};
+            print WRITER qq{$grey\t$grey failed recipient check\n};
             $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
 
         ### Check the senders.
         if ( my $msg = &check_senders( $FROM{$grey} ) ) {
-            print WRITER qq{$grey\t$grey failed sender check};
+            print WRITER qq{$grey\t$grey failed sender check\n};
             $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
 
         ### Check if host has queued up more than our suspect threshold
         if ( my $msg = &check_thresholds( $RCPT{$grey}, $FROM{$grey} ) ) {
-            print WRITER qq{$grey\t$grey failed threshold check: $msg};
+            print WRITER qq{$grey\t$grey failed threshold check: $msg\n};
             $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
@@ -381,7 +381,7 @@ sub child {
     foreach my $evil ( keys %SENDERS ) {
         my @deaders = split m/\t/s, $SENDERS{$evil};
         foreach my $dead (@deaders) {
-            print WRITER qq{$dead\tMailed from sender $evil with no MX or A};
+            print WRITER qq{$dead\tMailed from sender $evil with no MX or A\n};
         }
         @deaders = undef;
     }
