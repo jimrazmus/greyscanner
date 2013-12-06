@@ -53,9 +53,6 @@ if ( !$ENV{DEBUG} ) {
     setsid or die "can't setsid: $!";
 }
 
-setlogsock('unix');
-openlog( 'greyscanner', 'pid', 'mail' ) || die q{can't openlog};
-
 while (1) {
     ### Beginning a Scan
 
@@ -190,8 +187,6 @@ sub check_thresholds {
 }
 
 sub child {
-    setlogsock('unix');
-    openlog( 'greyscanner', 'pid', 'mail' ) || die q{can't openlog};
 
     #XXX - drop privs and become _greyscanner
 
@@ -390,6 +385,8 @@ sub child {
 }
 
 sub parent {
+    setlogsock('unix');
+    openlog( 'greyscanner', 'pid', 'mail' ) || warn q{can't openlog};
     my $line;
     my $ip_regex = '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)';
     while ( $line = <READER> ) {
@@ -406,6 +403,7 @@ sub parent {
             ### malformed line: $line
         }
     }
+    closelog();
 }
 
 __END__
