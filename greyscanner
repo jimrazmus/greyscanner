@@ -202,8 +202,12 @@ sub child {
     my %RCPT;
     my %SENDERS;
     my @line;
+    my $spamdb;
 
-    open my $spamdb, q{-|}, '/usr/sbin/spamdb' || die q{can't invoke spamdb!};
+    unless ( open $spamdb, q{-|}, '/usr/sbin/spamdb' ) {
+        syslog( 'err', q{can't invoke spamdb!} );
+        return 0;
+    }
     while (<$spamdb>) {
         chomp;
         @line = split m/[|]/s;
