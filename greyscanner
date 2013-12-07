@@ -104,24 +104,24 @@ sub check_recipients {
             ### Recipient: $r
             foreach (@GOOD) {
                 if ( $r =~ $_ ) {
-		    $result = 0;
-		    last;
-		}
+                    $result = 0;
+                    last;
+                }
             }
             next if $result == 0;
             $COMPREHENSIVE && ( $result = 1 ) && last;
             foreach (@BAD) {
                 if ( $r =~ $_ ) {
-		    $result = 1;
-		    last;
-		}
+                    $result = 1;
+                    last;
+                }
             }
             last if $result == 1;
             if ( -x $EXTERNAL_ADDRESS_CHECKER ) {
                 if ( system( ( "$EXTERNAL_ADDRESS_CHECKER", "$r" ) ) != 0 ) {
                     $result = 1;
-		    last;
-		}
+                    last;
+                }
             }
         }
     }
@@ -226,8 +226,8 @@ sub child {
 
             $line[MAIL_FROM] =~ s/^<//;
             $line[MAIL_FROM] =~ s/>$//;
-            $line[RCPT_TO]   =~ s/^<//;
-            $line[RCPT_TO]   =~ s/>$//;
+            $line[RCPT_TO] =~ s/^<//;
+            $line[RCPT_TO] =~ s/>$//;
 
             if ( $GREY{"$line[IP]"} ) {
                 $FROM{"$line[IP]"} .= "\t$line[MAIL_FROM]";
@@ -395,7 +395,8 @@ sub child {
 
 sub parent {
     my $line;
-    my $ip_regex = '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)';
+    my $ip_regex =
+'(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)';
     while ( $line = <READER> ) {
         chomp $line;
         if ( $line =~ m/^($ip_regex)\t(.*)$/s ) {
