@@ -193,7 +193,19 @@ sub check_thresholds {
 
 sub child {
 
-    #XXX - drop privs and become _greyscanner
+    my ( $uid, $gid ) = ( getpwnam('_greyscanner') )[ 2, 3 ];
+    unless ( $uid and $gid ) {
+        syslog( 'err', '_greyscanner uid and gid not found' );
+        return 0;
+    }
+
+    setgid($gid);    # change real and effective group id's
+    $) = "$gid $gid";    # ~= setgroups
+    setuid($uid);        # change real and effective user id's
+    unless ( $( == $gid && $( == $gid && $< == $uid && $< == $uid ) {
+        syslog( 'err', 'Failed to setgid or setuid' );
+        return 0;
+    }
 
     my %WHITE;
     my %GREY;
