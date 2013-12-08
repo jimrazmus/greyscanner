@@ -139,28 +139,30 @@ sub check_recipients {
 
 sub check_senders {
     my ($senders) = @_;
-    my $result = 0;
+    my $m         = q{};      # addr that failed the checks or err message
+    my $r         = PASSED;
     my @q = split m/\t/s, $senders;
     if ( !@q ) {
-        $result = 'mailed with no sender';
+        $m = '*no senders*';
+        $r = FAILED;
     }
     else {
-        foreach my $s (@q) {
-            ### Sender: $s
-            unless (
+        foreach my $addr (@q) {
+            ### Sender: $addr
+            next
+              if (
                 Email::Valid->address(
-                    -address     => "$s",
+                    -address     => "$addr",
                     -fudge       => 1,
                     -local_rules => 1
                 )
-              )
-            {
-                $result = "$s ($Email::Valid::Details)";
-                last;
-            }
+              );
+            $m = "$addr ($Email::Valid::Details)";
+            $r = FAILED;
+            last;
         }
     }
-    return $result;
+    return ( $r, $m );
 }
 
 sub check_thresholds {
@@ -289,8 +291,9 @@ sub child {
         next if $TRAPPED{$grey};
 
         ### Check the senders.
-        if ( my $msg = &check_senders( $FROM{$grey} ) ) {
-            print WRITER qq{$grey\t$grey failed sender check\n};
+        ( $r, $m ) = &check_senders( $FROM{$grey} );
+        if ( $r == FAILED ) {
+            print WRITER qq{$grey\tfailed sender check: $m\n};
             $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
