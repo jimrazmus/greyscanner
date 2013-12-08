@@ -20,7 +20,7 @@ use warnings;
 use IO::Handle;
 use Net::DNS;
 use Email::Valid;
-use POSIX qw(setsid);
+use POSIX qw(setgid setsid setuid);
 use Sys::Syslog qw(:DEFAULT setlogsock);
 
 use constant {
