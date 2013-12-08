@@ -114,7 +114,11 @@ sub check_recipients {
                 }
             }
             next if $r == PASSED;
-            $COMPREHENSIVE && ( $r = FAILED ) && last;
+            if ( $COMPREHENSIVE ) {
+                $m = $addr;
+                $r = FAILED;
+            }
+            last if $r == FAILED;
             foreach (@BAD) {
                 if ( $addr =~ $_ ) {
                     $r = FAILED;
@@ -125,9 +129,9 @@ sub check_recipients {
             if ( -x $EXTERNAL_ADDRESS_CHECKER ) {
                 if ( system( ( "$EXTERNAL_ADDRESS_CHECKER", "$addr" ) ) != 0 ) {
                     $r = FAILED;
-                    last;
                 }
             }
+            last if $r == FAILED;
         }
     }
     return ( $r, $m );
