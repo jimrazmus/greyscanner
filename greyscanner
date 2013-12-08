@@ -442,6 +442,7 @@ sub parent {
             ### malformed line: $line
         }
     }
+    return;
 }
 
 __END__
