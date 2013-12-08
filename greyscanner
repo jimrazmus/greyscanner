@@ -95,7 +95,7 @@ exit 0;
 sub check_recipients {
     my ($recipients) = @_;
     my $m            = q{};      # addr that failed the checks or err message
-    my $r            = PASSED;
+    my $r            = undef;
 
     # XXX: filter for domains we host so we only process "our" email addresses
     my @q = split m/\t/s, $recipients;
@@ -114,7 +114,7 @@ sub check_recipients {
                 }
             }
             next if $r == PASSED;
-            if ($COMPREHENSIVE) {
+            if ( $COMPREHENSIVE == 1 ) {
                 $m = $addr;
                 $r = FAILED;
             }
@@ -134,6 +134,7 @@ sub check_recipients {
             last if $r == FAILED;
         }
     }
+    $r //= PASSED;
     return ( $r, $m );
 }
 
