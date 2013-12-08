@@ -29,6 +29,8 @@ use constant {
     HOST_NAME => 2,
     MAIL_FROM => 3,
     RCPT_TO   => 4,
+    PASSED    => 0,
+    FAILED    => 1
 };
 
 my $SCAN_INTERVAL            = 600;
@@ -92,40 +94,43 @@ exit 0;
 
 sub check_recipients {
     my ($recipients) = @_;
-    my $result = 1;
+    my $m            = q{};       # addr that failed the checks or err message
+    my $r            = PASSED;
 
     # XXX: filter for domains we host so we only process "our" email addresses
     my @q = split m/\t/s, $recipients;
     if ( !@q ) {
-        $result = 1;
+        $m = '*no recipients*';
+        $r = FAILED;
     }
     else {
-        foreach my $r (@q) {
-            ### Recipient: $r
+        foreach my $addr (@q) {
+            ### Recipient: $addr
             foreach (@GOOD) {
-                if ( $r =~ $_ ) {
-                    $result = 0;
+                if ( $addr =~ $_ ) {
+                    $m = q{};
+                    $r = PASSED;
                     last;
                 }
             }
-            next if $result == 0;
-            $COMPREHENSIVE && ( $result = 1 ) && last;
+            next if $r == PASSED;
+            $COMPREHENSIVE && ( $r = FAILED ) && last;
             foreach (@BAD) {
-                if ( $r =~ $_ ) {
-                    $result = 1;
+                if ( $addr =~ $_ ) {
+                    $r = FAILED;
                     last;
                 }
             }
-            last if $result == 1;
+            last if $r == FAILED;
             if ( -x $EXTERNAL_ADDRESS_CHECKER ) {
-                if ( system( ( "$EXTERNAL_ADDRESS_CHECKER", "$r" ) ) != 0 ) {
-                    $result = 1;
+                if ( system( ( "$EXTERNAL_ADDRESS_CHECKER", "$addr" ) ) != 0 ) {
+                    $r = FAILED;
                     last;
                 }
             }
         }
     }
-    return $result;
+    return ( $r, $m );
 }
 
 sub check_senders {
@@ -193,7 +198,7 @@ sub check_thresholds {
 
 sub child {
 
-    my ( $uid, $gid ) = ( getpwnam('_greyscanner') )[ 2, 3 ];
+    my ( $uid, $gid ) = ( getpwnam '_greyscanner' )[ 2, 3 ];
     unless ( $uid and $gid ) {
         syslog( 'err', '_greyscanner uid and gid not found' );
         return 0;
@@ -262,6 +267,8 @@ sub child {
 
     ### Loaded: "$wi whitelisted, $tr trapped, $gr unique greys"
 
+    my ( $r, $m );
+
     foreach my $grey ( keys %GREY ) {
 
         ### Analyzing Grey IP: $grey
@@ -270,8 +277,9 @@ sub child {
         next if ( $TRAPPED{$grey} || $WHITE{$grey} );
 
         ### Check the recipients.
-        if ( &check_recipients( $RCPT{$grey} ) ) {
-            print WRITER qq{$grey\t$grey failed recipient check\n};
+        ( $r, $m ) = &check_recipients( $RCPT{$grey} );
+        if ( $r == FAILED ) {
+            print WRITER qq{$grey\tfailed recipient check: $m\n};
             $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
