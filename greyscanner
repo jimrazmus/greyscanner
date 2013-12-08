@@ -167,7 +167,8 @@ sub check_senders {
 
 sub check_thresholds {
     my ( $senders, $recipients ) = @_;
-    my $result = 0;
+    my $m         = q{};
+    my $r         = PASSED;
     my @qr     = split m/\t/s, $recipients;
     my @qs     = split m/\t/s, $senders;
     my $count  = @qs;
@@ -178,13 +179,13 @@ sub check_thresholds {
         my %D = ();
 
         # count the unique senders, recipients, and domains.
-        foreach my $r (@qr) {
-            $R{"$r"}++;
+        foreach my $i (@qr) {
+            $R{"$i"}++;
         }
-        foreach my $s (@qs) {
-            $S{"$s"}++;
-            $s =~ s/[^\@]+\@//;
-            $D{"$s"}++;
+        foreach my $i (@qs) {
+            $S{"$i"}++;
+            $i =~ s/[^\@]+\@//;
+            $D{"$i"}++;
         }
 
         my $rcount = keys %R;
@@ -192,14 +193,16 @@ sub check_thresholds {
         my $dcount = keys %D;
 
         if ( $dcount > $MAX_DOMAINS ) {
-            $result = "sending from $dcount domains (> $MAX_DOMAINS)";
+            $m = "sending from $dcount domains (> $MAX_DOMAINS)";
+            $r = FAILED;
         }
         elsif ( $scount / $count > $MAX_SENDERS_RATIO ) {
-            $result = "ratio is $scount/$count (> $MAX_SENDERS_RATIO)";
+            $m = "ratio is $scount/$count (> $MAX_SENDERS_RATIO)";
+            $r = FAILED;
         }
 
     }
-    return $result;
+    return ( $r, $m );
 }
 
 sub child {
@@ -299,8 +302,9 @@ sub child {
         next if $TRAPPED{$grey};
 
         ### Check if host has queued up more than our suspect threshold
-        if ( my $msg = &check_thresholds( $RCPT{$grey}, $FROM{$grey} ) ) {
-            print WRITER qq{$grey\t$grey failed threshold check: $msg\n};
+        ( $r, $m ) = &check_thresholds( $RCPT{$grey}, $FROM{$grey} );
+        if ( $r == FAILED ) {
+            print WRITER qq{$grey\tfailed threshold check: $m\n};
             $TRAPPED{$grey}++;
         }
         next if $TRAPPED{$grey};
