@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 # Copyright (c) 2006 Bob Beck <beck@openbsd.org>.  All rights reserved.
-# Copyright (c) 2009 Jim Razmus II <jim@openbsd.org>
+# Copyright (c) 2009,2013 Jim Razmus II <jim@openbsd.org>
 #
 # Permission to use, copy, modify, and distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
