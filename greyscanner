@@ -471,7 +471,7 @@ F</etc/mail/greyscanner.conf> optional config file
 
 =head1 SEE ALSO
 
-spamd(8), spamdb(8)
+spamd(8), spamdb(8), L<http://bitbucket.org/bonetruck/greyscanner>
 
 =head1 HISTORY
 
