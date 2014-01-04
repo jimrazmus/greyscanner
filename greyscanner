@@ -217,7 +217,7 @@ sub child {
     setgid($gid);    # change real and effective group id's
     $) = "$gid $gid";    # ~= setgroups
     setuid($uid);        # change real and effective user id's
-    unless ( $( == $gid && $( == $gid && $< == $uid && $< == $uid ) {
+    unless ( $( == $gid && $) == $gid && $< == $uid && $> == $uid ) {
         syslog( 'err', 'Failed to setgid or setuid' );
         return 0;
     }
