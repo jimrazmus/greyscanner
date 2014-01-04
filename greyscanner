@@ -417,7 +417,7 @@ sub child {
     foreach my $evil ( keys %SENDERS ) {
         my @deaders = split m/\t/s, $SENDERS{$evil};
         foreach my $dead (@deaders) {
-            print WRITER qq{$dead\tMailed from sender $evil with no MX or A\n};
+            print WRITER qq{$dead\tMailed from sender $evil with contrary MX or A\n};
         }
         @deaders = undef;
     }
