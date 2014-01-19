@@ -410,14 +410,14 @@ sub child {
 
             next if $done{"$h"};
 
-            if ( $SENDERS{$h} ) {
-                $SENDERS{$h} .= "\t$grey";
+            if ( $SENDERS{"$h"} ) {
+                $SENDERS{"$h"} .= "\t$grey";
             }
             else {
-                $SENDERS{$h} = "$grey";
+                $SENDERS{"$h"} = "$grey";
             }
 
-            $done{$h}++;
+            $done{"$h"}++;
         }
 
     }
