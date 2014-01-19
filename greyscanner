@@ -325,7 +325,7 @@ sub child {
             $h =~ s/\s_+//g;
 
             if ( $SENDERS{$h} ) {
-                $SENDERS{$h} .= "\t $grey";
+                $SENDERS{$h} .= "\t$grey";
             }
             else {
                 $SENDERS{$h} = "$grey";
