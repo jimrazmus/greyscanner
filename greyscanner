@@ -93,85 +93,57 @@ closelog();
 exit 0;
 
 sub check_dns {
-    # confirm the purported sending domain has an A or MX record
-
     my ($senders_href) = @_;
-
-    my $timeout = 5;
-    my $sel     = IO::Select->new;
-    my $res     = Net::DNS::Resolver->new;
     my @domains = ( keys %$senders_href );
+    my @ready   = ();
+    my $res     = Net::DNS::Resolver->new;
+    my $sel     = IO::Select->new;
+    my %strikes = ();
+    my $timeout = 5;
+    my $unready = 0;
 
-    while ( scalar @domains > 0 ) {
-        my @active = $sel->handles;
-        while ( $#active < $DNS_SOCK_MAX - 1 ) {
+    while ( ( scalar @domains > 0 ) || $sel->count ) {
 
-            # queue up a query for this domain.
+        ### Attempt to queue queries
+        while ( $sel->count < $DNS_SOCK_MAX ) {
             my $d = pop @domains;
             last unless defined $d;
-            $sel->add( $res->bgsend( $d, 'A' ) );
-            $sel->add( $res->bgsend( $d, 'MX' ) );
-            @active = $sel->handles;
+            $sel->add( $res->bgsend( $d, "A" ) );
+            $sel->add( $res->bgsend( $d, "MX" ) );
         }
-        my @ready = $sel->can_read($timeout);
+
+        ### Attempt to dequeue answers
+        @ready = $sel->can_read($timeout);
         if (@ready) {
             foreach my $sock (@ready) {
                 my $packet = $res->bgread($sock);
-                if ( $packet->header->ancount ) {
+                if ( $packet->header->ancount == 0 ) {
                     my @q = $packet->question;
-                    if ( $q[0]->qtype eq 'A' || $q[0]->qtype eq 'MX' ) {
-                        my $d = $q[0]->qname;
-                        delete $senders_href->{$d};
-                    }
+                    my $d = $q[0]->qname;
+                    $strikes{"$d"}++;
                 }
-
-                # Check for the other sockets.
-                $sel->remove($sock);
-                $sock = undef;
-            }
-        }
-    }
-    @domains = undef;
-
-    my $timedout = 0;
-    my @ready;
-    # XXX timed out queries should remove the SENDER rather than trap it?
-    while ($timedout < 4
-        && $sel->handles
-        && ( @ready = $sel->can_read($timeout) ) )
-    {
-        if (@ready) {
-            foreach my $sock (@ready) {
-                my $packet = $res->bgread($sock);
-                if ( $packet->header->ancount ) {
-                    my @q = $packet->question;
-                    if ( $q[0]->qtype eq 'A' || $q[0]->qtype eq 'MX' ) {
-                        my $d = $q[0]->qname;
-                        delete $senders_href->{$d};
-                    }
-                }
-
-                # Check for the other sockets.
                 $sel->remove($sock);
                 $sock = undef;
             }
         }
         else {
-            $timedout++;
+            $unready++;
+        }
+
+        ### Check how many times we've been un-ready
+        last if ( $unready == $timeout );
+    }
+
+    ### Trap everyone we confirmed without an MX or A record
+    foreach my $h ( keys %strikes ) {
+        next unless ( $strikes{"$h"} == 2 );
+        my @IPs = split m/\t/s, $senders_href->{"$h"};
+        foreach my $IP (@IPs) {
+            print WRITER qq{$IP\tMailed from sender $h without MX or A\n};
         }
     }
 
-    # now whatever is left in %SENDERS is evil - we removed everything
-    # we could find a mailer for. We go through the evil addresses
-    # and trap anyone sending from one...
-    foreach my $evil ( keys %$senders_href ) {
-        my @deaders = split m/\t/s, $senders_href->{$evil};
-        foreach my $dead (@deaders) {
-            print WRITER qq{$dead\tMailed from sender $evil with contrary MX or A\n};
-        }
-        @deaders = undef;
-    }
-
+    return;
 }
 
 sub check_recipients {
