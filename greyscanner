@@ -310,7 +310,7 @@ sub child {
         }
         next if $TRAPPED{$grey};
 
-        next if ( !$DNS_SOCK_MAX );    # skip rest if not using DNS checks;
+        next if ( $DNS_SOCK_MAX == 0 );    # skip rest if not using DNS checks;
 
         # finally, we will check for an MX or A record of the source address.
         # first we build a hash of all the senders, keyed by host part
@@ -334,7 +334,7 @@ sub child {
 
     }
 
-    if ( !$DNS_SOCK_MAX ) {
+    if ( $DNS_SOCK_MAX == 0 ) {
         return;
     }
 
