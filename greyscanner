@@ -119,7 +119,6 @@ sub check_dns {
                 my $packet = $res->bgread($sock);
                 if ( $packet->header->ancount ) {
                     my @q = $packet->question;
-		    # XXX we want BOTH an MX and A, not OR
                     if ( $q[0]->qtype eq 'A' || $q[0]->qtype eq 'MX' ) {
                         my $d = $q[0]->qname;
                         delete $senders_href->{$d};
