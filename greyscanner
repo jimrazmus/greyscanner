@@ -420,8 +420,10 @@ sub child {
 
     }
 
+    return if ( $DNS_SOCK_MAX == 0 );
+
     ### Check DNS for hosts in the SENDERS hash
-    &check_dns( \%SENDERS ) if ( $DNS_SOCK_MAX > 0 );
+    &check_dns( \%SENDERS );
 
     return;
 }
