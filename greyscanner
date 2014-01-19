@@ -317,6 +317,7 @@ sub child {
         # of the address, so we only look each host part up once, no matter
         # how many hosts are sending mail with it as the sender.
 
+        my %done = ();
         my @senders = split m/\t/s, $FROM{$grey};
         foreach my $s (@senders) {
 
@@ -324,12 +325,16 @@ sub child {
             my $h = ( $s =~ /^.*@(.*)$/ ? $1 : $s );
             $h =~ s/\s_+//g;
 
+            next if $done{"$h"};
+
             if ( $SENDERS{$h} ) {
                 $SENDERS{$h} .= "\t$grey";
             }
             else {
                 $SENDERS{$h} = "$grey";
             }
+
+            $done{$h}++;
         }
 
     }
