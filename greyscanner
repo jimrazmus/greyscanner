@@ -395,11 +395,9 @@ sub child {
 
         next if ( $DNS_SOCK_MAX == 0 );    # skip rest if not using DNS checks;
 
-        # finally, we will check for an MX or A record of the source address.
-        # first we build a hash of all the senders, keyed by host part
-        # of the address, so we only look each host part up once, no matter
-        # how many hosts are sending mail with it as the sender.
-
+        ### Create hash of senders keyed by the host part of the address
+        # so we only look each host part up once, no matter how many hosts
+        # are sending mail with it as the sender.
         my %done = ();
         my @senders = split m/\t/s, $FROM{$grey};
         foreach my $s (@senders) {
