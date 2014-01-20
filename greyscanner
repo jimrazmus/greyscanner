@@ -134,12 +134,12 @@ sub check_dns {
         last if ( $unready == $timeout );
     }
 
-    ### Trap everyone we confirmed without an MX or A record
+    ### Trap everyone with neither an MX or A record
     foreach my $h ( keys %strikes ) {
         next unless ( $strikes{"$h"} == 2 );
         my @IPs = split m/\t/s, $senders_href->{"$h"};
         foreach my $IP (@IPs) {
-            print WRITER qq{$IP\tMailed from sender $h without MX or A\n};
+            print WRITER qq{$IP\tMailed from sender $h with neither MX or A\n};
         }
     }
 
